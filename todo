@@ -6,3 +6,5 @@ C | Check for vlc, cvlc, zenity, sp-sc
 D | External channel list
 E | HQ Recording fix
 F | Keep nohup size down
+G | Test VLC failures/stream lag.
+H | Test zenity dialogs while using cron.

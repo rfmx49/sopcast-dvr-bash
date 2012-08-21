@@ -15,11 +15,12 @@ sopchannel () {
 		"sop://broker.sopcast.com:3912/132431" "Tzonner1" \
 		"sop://broker.sopcast.com:3912/123456" "TBD Sopcast" \
 		"sop://broker.sopcast.com:3912/131822" "Footy Goal2" \
-		"sop://broker.sopcast.com:3912/132348" "LiveSportszone [RO]" \		
+		"sop://broker.sopcast.com:3912/132348" "LiveSportszone [RO]" \
 		"sop://221.12.89.140:3912/18669" "Test Channel" \
 	)
 
 	###### USER EDITABLE FIELDS ABOVE ######
+	if [ -z "$channelname" ]; then echo "Value not set, so exiting"; exit; fi
 	echo "Function found channel name $channelname"
 }
 
@@ -180,12 +181,8 @@ recordnow () {
 		echo "Stopping VLC Recording" && killall vlc
 		echo "Stopping CVLC" && killall cvlc
 		echo "Stopping Sopcast Connection" && killall sp-sc
-
-		nohup sp-sc $jobchannel 8901 8902 & 
+		sopconnect $channelname
 		echo "Attemting to record $jobchannel"
-	
-		sleep 30
-
 		echo 'VLC Starting'
 		nohup cvlc http://127.0.0.1:8902/tv.asf --sout=file/asf:"$jobfile".asf &
 		echo 'done'
@@ -269,8 +266,7 @@ checkstatus () {
 				echo "Stopping CVLC" && killall cvlc
 				#### Reconnect
 				echo "reconnecting to sopcast"
-				nohup sp-sc $jobchannel 8901 8902 &
-				sleep 30
+				sopconnect $channelname
 				echo "restarting vlc player"
 				nohup cvlc http://127.0.0.1:8902/tv.asf --sout=file/asf:"$jobfile$newfile".asf &
 				newfile=$((nefile+1))
@@ -286,11 +282,27 @@ showonly () {
 	sopchannel
 	echo $channelname
 	echo "Connecting to sopcast"
-	nohup sp-sc $channelname 8901 8902 &
-	sleep 30
+	sopconnect $channelname
 	echo "Starting VLC"
 	vlc http://127.0.0.1:8902/tv.asf
-	killall sp-sc
+	killall sp-sc && echo "Stopping sopcast Connection."
+}
+
+sopconnect () {
+	nohup sp-sc $1 8901 8902 > "$appfolder/log.txt" &
+	sleep 3
+	sopstarted="no"
+	(while [ $sopstarted != "yes" ]; do
+		grep "I START " "$appfolder/log.txt"
+		if [ $? == "1" ]; then
+			echo "Sopcast not started"
+			sleep 1
+		else
+			echo "Sopcast connected"
+			sopstarted="yes"
+		fi
+	done) | zenity --progress --pulsate --text="Connecting to Sopcast channel: \n$1" --auto-close --no-cancel
+	sleep 3
 }
 
 recordonly () {
@@ -309,10 +321,22 @@ recordandshow () {
 	sopchannel
 	echo $channelname
 	echo "Connecting to sopcast"
-	nohup sp-sc $channelname 8901 8902 &
+	nohup sp-sc $channelname 8901 8902 > "$appfolder/log.txt"  &
 	jobname=$(zenity --entry --text="Save file name. \n\nNO SPACES")
 	zenity --info --text="Choose the folder you would like to save recording to"
 	foldername=$(zenity --file-selection --directory)
+	sopstarted="no"
+	while [ $sopstarted != "yes" ]; do
+		grep "I START " "$appfolder/log.txt"
+		if [ $? == "1" ]; then
+			echo "Sopcast not started"
+			sleep 1
+		else
+			echo "Sopcast connected"
+			sopstarted="yes"
+		fi
+	done
+	sleep 1
 	echo "Starting VLC"
 	nohup vlc http://127.0.0.1:8902/tv.asf &
 	echo Create new recording	
