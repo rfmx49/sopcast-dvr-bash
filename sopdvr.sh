@@ -20,7 +20,7 @@ sopchannel () {
 	)
 
 	###### USER EDITABLE FIELDS ABOVE ######
-	if [ -z "$channelname" ]; then echo "Value not set, so exiting"; exit; fi
+	if [ -z "$channelname" ]; then echo "Value not set, so exiting"; return 1; fi
 	echo "Function found channel name $channelname"
 }
 
@@ -34,22 +34,25 @@ cronstart () {
 			--min-value=1 \
 			--max-value=31 \
 		)
+		if [ -z "$crondate" ]; then echo "crondate read failed"; return; fi
 		cronmonth=$(zenity --scale \
 			--text="Enter month for recording." \
 			--value=$(date +%-m) \
 			--min-value=1 \
 			--max-value=12 \
 		)
+		if [ -z "$cronmonth" ]; then echo "cronmonth read failed"; return; fi
 		cronday=$(zenity --scale \
 			--text="Enter day of week for recording.\n\nSunday = 0 --- Saturday = 6" \
 			--value=$(date +%-w) \
 			--min-value=0 \
 			--max-value=6 \
 		)
+		if [ -z "$cronday" ]; then echo "cronday read failed"; return; fi
 	else
 		crondate=$(date +%-d)
 		cronmonth=$(date +%-m)
-		cronday=$(date +%-W)
+		cronday=$(date +%-w)
 	fi
 	cronhour=$(zenity --scale \
 		--text="Enter hour of day for recording.\n\n24 hour time\nRecommend starting recording earlier than start time" \
@@ -57,15 +60,22 @@ cronstart () {
 		--min-value=0 \
 		--max-value=23 \
 	)
+	if [ -z "$cronhour" ]; then echo "cronhour read failed"; return; fi
 	cronminute=$(zenity --scale \
 		--text="Enter minute of hour for recording.\n\nRecommend starting recording earlier than start time" \
 		--value=$(date +%-M) \
 		--min-value=0 \
 		--max-value=60 \
 	)
+	if [ -z "$cronminute" ]; then echo "cronminute read failed"; return; fi
 	cron=$(zenity --entry --text="The following will be written to your crontab file.\nStart of recording schedual\nChanges can be made below"\
-		--entry-text="$cronminute $cronhour $crondate $cronmonth $cronday $appfolder/sopdvr.sh $jobname start"\
+		--entry-text="$cronminute $cronhour $crondate $cronmonth $cronday cd $appfolder && $appfolder/sopdvr.sh $jobname start >> $jobname.log"\
 	)
+	if [ -z "$cron" ]; then 
+		echo "cron verify failed"
+		rm "$appfolder/$jobname.conf"
+		return 1
+	fi
 	#write crontab file
 	tmpfile=/tmp/cron.tmp
 	crontab -l > $tmpfile
@@ -84,22 +94,25 @@ cronend () {
 			--min-value=1 \
 			--max-value=31 \
 		)
+		if [ -z "$crondateend" ]; then echo "crondateend read failed"; return; fi
 		cronmonthend=$(zenity --scale \
 			--text="Enter month for recording." \
 			--value=$3 \
 			--min-value=1 \
 			--max-value=12 \
 		)
+		if [ -z "$cronmonthend" ]; then echo "cronmonthend read failed"; return; fi
 		crondayend=$(zenity --scale \
 			--text="Enter day of week for recording end time.\n\nSunday = 0 --- Saturday = 6" \
 			--value=$4 \
 			--min-value=0 \
 			--max-value=6 \
 		)
+		if [ -z "$crondayend" ]; then echo "cronmonthend read failed"; return; fi
 	else
 		crondateend=$(date +%-d)
 		cronmonthend=$(date +%-m)
-		crondayend=$(date +%-W)
+		crondayend=$(date +%-w)
 	fi
 	cronhourend=$(zenity --scale \
 		--text="Enter hour of day for recording end time.\n\n24 hour time\nRecommend ending recording later than end time" \
@@ -107,6 +120,7 @@ cronend () {
 		--min-value=0 \
 		--max-value=23 \
 	)
+	if [ -z "$cronhourend" ]; then echo "cronhourend read failed"; return; fi
 	cronminuteend=$(zenity --scale \
 		--text="Enter minute of hour for recording end time.\n\nRecommend ending recording later than end time" \
 		--value=$6 \
@@ -115,13 +129,19 @@ cronend () {
 	)
 	
 	#Confirm cron file
-	cronend=$(zenity --entry --text="The following will be written to your crontab file.\nEnd of recording schedual\nChanges can be made below"\
-		--entry-text="$cronminuteend $cronhourend $crondateend $cronmonthend $crondayend $appfolder/sopdvr.sh $jobname kill"\
+	cronendt=$(zenity --entry --text="The following will be written to your crontab file.\nEnd of recording schedual\nChanges can be made below"\
+		--entry-text="$cronminuteend $cronhourend $crondateend $cronmonthend $crondayend cd $appfolder && $appfolder/sopdvr.sh $jobname kill >> $jobname.log"\
 	)
+	if [ -z "$cronendt" ]; then
+		echo "cronendt verify failed clearing crontab"
+		killjob $jobname
+		rm "$appfolder/$jobname.conf"
+		return 1
+	fi
 	#write crontab file
 	tmpfile=/tmp/cron.tmp
 	crontab -l > $tmpfile
-	echo $cronend >> $tmpfile
+	echo $cronendt >> $tmpfile
 	crontab $tmpfile
 	rm $tmpfile
 }
@@ -131,26 +151,33 @@ cronend () {
 creation () {
 	echo Create new recording
 	jobname=$(zenity --entry --text="Job name. \n\nNO SPACES")
+	if [ -z "$jobname" ]; then echo "Job name read failed"; return; fi
 	echo $jobname > "$appfolder/$jobname.conf"
-	filename=$(zenity --entry --text="Enter save file name.\n\nNO SPACES" --entry-text=$jobname)
 	zenity --info --text="Choose the folder you would like to save recording to"
 	foldername=$(zenity --file-selection --directory)
-	echo $foldername/$filename >> "$appfolder/$jobname.conf"
+	if [ -z "$foldername" ]; then echo "Folder name read failed"; return; fi
+	echo $foldername/$jobname >> "$appfolder/$jobname.conf"
+	sopchannel
+	if [ $? == 1 ]; then echo "sopchannel failed"; rm "$appfolder/$jobname.conf"; return; fi
 	echo $channelname >> "$appfolder/$jobname.conf"
 	#Get crontab info
 	cronstart $jobname
+	if [ $? == 1 ]; then echo "Cron start failed"; return; fi
 	cronend $jobname $crondate $cronmonth $cronday $cronhour $cronminute
+	if [ $? == 1 ]; then echo "Cron end failed"; return; fi
 }
 
 instantcreate () {
 	echo Create new recording
 	jobname=$(zenity --entry --text="Job name. \n\nNO SPACES")
+	if [ -z "$jobname" ]; then echo "Job name read failed"; return; fi
 	echo $jobname > "$appfolder/$jobname.conf"
-	filename=$(zenity --entry --text="Enter save file name.\n\nNO SPACES" --entry-text=$jobname)
 	zenity --info --text="Choose the folder you would like to save recording to"
 	foldername=$(zenity --file-selection --directory)
-	echo $foldername/$filename >> "$appfolder/$jobname.conf"
+	if [ -z "$foldername" ]; then echo "Folder name read failed"; return; fi
+	echo $foldername/$jobname >> "$appfolder/$jobname.conf"
 	sopchannel
+	if [ $? == 1 ]; then echo "sopchannel failed"; rm "$appfolder/$jobname.conf"; return; fi
 	echo $channelname
 	echo $channelname >> "$appfolder/$jobname.conf"
 	zenity --question --text="Do you want to set a record end time?\n If you do not you will have to manually kill VLC and SP-SC\nkillall sp-ec and killall vlc"
@@ -161,6 +188,7 @@ instantcreate () {
 		cronhour=$(date +%-H)
 		cronminute=$(date +%-M)
 		cronend $jobname $crondate $cronmonth $cronday $cronhour $cronminute
+		if [ $? == 1 ]; then echo "Cron end failed"; return; fi
 	fi
 	recordnow $jobname	
 }
@@ -181,7 +209,7 @@ recordnow () {
 		echo "Stopping VLC Recording" && killall vlc
 		echo "Stopping CVLC" && killall cvlc
 		echo "Stopping Sopcast Connection" && killall sp-sc
-		sopconnect $channelname
+		sopconnect $jobchannel
 		echo "Attemting to record $jobchannel"
 		echo 'VLC Starting'
 		nohup cvlc http://127.0.0.1:8902/tv.asf --sout=file/asf:"$jobfile".asf &
@@ -195,11 +223,15 @@ recordnow () {
 
 killjob () {
 	jobname=$1
-	echo "KILL KILL KILL"
+	echo "KILL KILL KILL $jobname job"
 	#kill still recording sh session.
-	psid=$(ps ax | grep -v grep | grep "/bin/bash ./sopdvr.sh $jobname start"| awk '{print$1}')
-	echo "Process ID = $psid"
-	kill -9 $psid
+	psid="start"
+	while [ "$psid" != "end" ]; do
+		psid=$(ps ax | grep -v grep | grep "sopdvr.sh $jobname start"| awk '{print$1}')
+		if [ -z "$psid" ]; then psid="end"; fi
+		echo "Process ID = $psid"
+		kill -9 $psid
+	done
 	echo "Script Killed"
 	echo "Stopping VLC Recording" && killall vlc
 	echo "Stopping CVLC" && killall cvlc
@@ -266,7 +298,7 @@ checkstatus () {
 				echo "Stopping CVLC" && killall cvlc
 				#### Reconnect
 				echo "reconnecting to sopcast"
-				sopconnect $channelname
+				sopconnect $jobchannel
 				echo "restarting vlc player"
 				nohup cvlc http://127.0.0.1:8902/tv.asf --sout=file/asf:"$jobfile$newfile".asf &
 				newfile=$((nefile+1))
@@ -280,6 +312,7 @@ checkstatus () {
 
 showonly () {
 	sopchannel
+	if [ $? == 1 ]; then echo "sopchannel failed"; rm "$appfolder/$jobname.conf"; return; fi
 	echo $channelname
 	echo "Connecting to sopcast"
 	sopconnect $channelname
@@ -289,7 +322,9 @@ showonly () {
 }
 
 sopconnect () {
+	echo "Starting sop connect"
 	nohup sp-sc $1 8901 8902 > "$appfolder/log.txt" &
+	echo "Waiting for connection to $1"
 	sleep 3
 	sopstarted="no"
 	(while [ $sopstarted != "yes" ]; do
@@ -308,10 +343,13 @@ sopconnect () {
 recordonly () {
 	echo Create new recording
 	jobname=$(zenity --entry --text="Save file name. \n\nNO SPACES")
+	if [ -z "$jobname" ]; then echo "Job name read failed"; return; fi
 	zenity --info --text="Choose the folder you would like to save recording to"
 	foldername=$(zenity --file-selection --directory)
+	if [ -z "$foldername" ]; then echo "Folder name read failed"; return; fi
 	nohup cvlc http://127.0.0.1:8902/tv.asf --sout=file/asf:"$foldername/$jobname".asf &
 	sopchannel
+	if [ $? == 1 ]; then echo "sopchannel failed"; rm "$appfolder/$jobname.conf"; return; fi
 	echo $channelname
 	jobfile="$foldername/$jobname"
 	checkstatus $jobname $channelname $jobfile
@@ -319,14 +357,17 @@ recordonly () {
 
 recordandshow () {
 	sopchannel
+	if [ $? == 1 ]; then echo "sopchannel failed"; rm "$appfolder/$jobname.conf"; return; fi
 	echo $channelname
 	echo "Connecting to sopcast"
 	nohup sp-sc $channelname 8901 8902 > "$appfolder/log.txt"  &
 	jobname=$(zenity --entry --text="Save file name. \n\nNO SPACES")
+	if [ -z "$jobname" ]; then echo "Job name read failed"; return; fi
 	zenity --info --text="Choose the folder you would like to save recording to"
 	foldername=$(zenity --file-selection --directory)
+	if [ -z "$foldername" ]; then echo "Folder name read failed"; return; fi
 	sopstarted="no"
-	while [ $sopstarted != "yes" ]; do
+	(while [ $sopstarted != "yes" ]; do
 		grep "I START " "$appfolder/log.txt"
 		if [ $? == "1" ]; then
 			echo "Sopcast not started"
@@ -335,7 +376,7 @@ recordandshow () {
 			echo "Sopcast connected"
 			sopstarted="yes"
 		fi
-	done
+	done) | zenity --progress --pulsate --text="Connecting to Sopcast channel: \n$channelname" --auto-close --no-cancel
 	sleep 1
 	echo "Starting VLC"
 	nohup vlc http://127.0.0.1:8902/tv.asf &
@@ -350,6 +391,7 @@ stoprec () {
 	zenity --question --text="Do you know the job name?"
 	if [ $? == "0" ]; then
 		jobname=$(zenity --entry --text="Please type the job name to stop.")
+		if [ -z "$jobname" ]; then echo "Job name read failed"; return; fi
 		killjob $jobname
 	else
 		zenity --question --text="Do you also want to clear crontab of all jobs?"
@@ -390,13 +432,21 @@ advancemenu () {
 cleancron () {
 	echo "KILL KILL KILL"
 		#kill still recording sh session.
-		psid=$(ps ax | grep -v grep | grep "/bin/bash ./sopdvr.sh * start"| awk '{print$1}')
-		echo "Process ID = $psid"
-		kill -9 $psid
+		psid="start"
+		while [ "$psid" != "end" ]; do
+			psid=$(ps ax | grep -v grep | grep "sopdvr.sh $jobname start"| awk '{print$1}')
+			if [ -z "$psid" ]; then psid="end"; fi
+			echo "Process ID = $psid"
+			kill -9 $psid
+		done
 		echo "Script Killed"
-		psid=$(ps ax | grep -v grep | grep "/bin/bash ./sopdvr.sh * kill"| awk '{print$1}')
-		echo "Process ID = $psid"
-		kill -9 $psid
+		psid="start"
+		while [ "$psid" != "end" ]; do
+			psid=$(ps ax | grep -v grep | grep "sopdvr.sh $jobname start"| awk '{print$1}')
+			if [ -z "$psid" ]; then psid="end"; fi			
+			echo "Process ID = $psid"
+			kill -9 $psid
+		done
 		echo "Script Killed"
 		echo "Stopping VLC Recording" && killall vlc
 		echo "Stopping CVLC" && killall cvlc
