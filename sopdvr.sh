@@ -24,6 +24,27 @@ sopchannel () {
 	echo "Function found channel name $channelname"
 }
 
+randomport () {
+	FLOOR=6000
+	ranport=0
+	portfound="no"
+	while [ $portfound != "yes" ]; do
+		while [ "$ranport" -le $FLOOR ]; do
+		 	ranport=$RANDOM
+		done
+		grep "$ranport$" $appfolder/*.conf
+		grepfind=$?
+		case $grepfind in
+			0) ranport=0 ;;
+			1) portfound="yes" ;;
+			2) portfound="yes" ;;
+			*) ranport=0 ;;
+		esac
+		echo $portfound
+	done
+	echo "Random $ranport"
+}
+
 cronstart () {
 	jobname=$1
 	zenity --question --text="Is the recording start date today?"
@@ -155,16 +176,23 @@ creation () {
 	echo $jobname > "$appfolder/$jobname.conf"
 	zenity --info --text="Choose the folder you would like to save recording to"
 	foldername=$(zenity --file-selection --directory)
-	if [ -z "$foldername" ]; then echo "Folder name read failed"; return; fi
+	if [ -z "$foldername" ]; then echo "Folder name read failed";rm "$appfolder/$jobname.conf"; return; fi
 	echo $foldername/$jobname >> "$appfolder/$jobname.conf"
+	randomport
+	jobportin=$ranport
+	randomport
+	jobportout=$ranport
 	sopchannel
 	if [ $? == 1 ]; then echo "sopchannel failed"; rm "$appfolder/$jobname.conf"; return; fi
 	echo $channelname >> "$appfolder/$jobname.conf"
+	echo $jobportin >> "$appfolder/$jobname.conf"
+	echo $jobportout >> "$appfolder/$jobname.conf"
 	#Get crontab info
 	cronstart $jobname
 	if [ $? == 1 ]; then echo "Cron start failed"; return; fi
 	cronend $jobname $crondate $cronmonth $cronday $cronhour $cronminute
 	if [ $? == 1 ]; then echo "Cron end failed"; return; fi
+	zenity --info --text="Job creation completed"
 }
 
 instantcreate () {
@@ -176,10 +204,16 @@ instantcreate () {
 	foldername=$(zenity --file-selection --directory)
 	if [ -z "$foldername" ]; then echo "Folder name read failed"; return; fi
 	echo $foldername/$jobname >> "$appfolder/$jobname.conf"
+	randomport
+	jobportin=$ranport
+	randomport
+	jobportout=$ranport
 	sopchannel
 	if [ $? == 1 ]; then echo "sopchannel failed"; rm "$appfolder/$jobname.conf"; return; fi
 	echo $channelname
 	echo $channelname >> "$appfolder/$jobname.conf"
+	echo $jobportin >> "$appfolder/$jobname.conf"
+	echo $jobportout >> "$appfolder/$jobname.conf"
 	zenity --question --text="Do you want to set a record end time?\n If you do not you will have to manually kill VLC and SP-SC\nkillall sp-ec and killall vlc"
 	if [ $? == "0" ]; then
 		crondate=$(date +%-d)
@@ -202,23 +236,35 @@ recordnow () {
 		echo "$appfolder/$jobname.conf"
 		jobfile=$(<"$appfolder/$jobname.conf")
 		set -- $jobfile
+		jobportin=$4
+		jobportout=$5
 		jobchannel=$3
 		jobfile=$2
-		echo "recording channel $jobchannel for job $jobname saving to $jobfile.asf"
+		echo "recording channel $jobchannel $jobportin $jobportout for job $jobname saving to $jobfile.asf"
 		####FROM AUTOSOP.SH
 		echo "Stopping VLC Recording" && killall vlc
 		echo "Stopping CVLC" && killall cvlc
 		echo "Stopping Sopcast Connection" && killall sp-sc
-		sopconnect $jobchannel
+		sopconnect $jobchannel $jobportin $jobportout
 		echo "Attemting to record $jobchannel"
 		echo 'VLC Starting'
-		nohup cvlc http://127.0.0.1:8902/tv.asf --sout=file/asf:"$jobfile".asf &
+		nohup cvlc "http://127.0.0.1:$jobportout/tv.asf" --sout=file/asf:"$jobfile".asf &
 		echo 'done'
 
 		sleep 15
 
-		checkstatus $jobname $jobchannel $jobfile
+		checkstatus $jobname $jobchannel $jobfile $jobportin $jobportout
 	fi
+}
+
+killallreplace () {
+	##replaces killall vlc && killall sp-sc
+	#psid=$(ps ax | grep -v grep | grep "sopdvr.sh $jobname start"| awk '{print$1}')
+	jobchannel=$1
+	jobportin=$2
+	jobportout=$3
+	psid=$(ps ax | grep -v grep | grep "sp-sc.$jobchannel.$jobportin.$jobportout$")
+	psid=$(ps ax | grep -v grep | grep "vlc.http://127.0.0.1:$jobportout/tv.asf")
 }
 
 killjob () {
@@ -239,10 +285,13 @@ killjob () {
 	tmpfile=/tmp/cron.tmp
 	tmpfilenew=/tmp/cronnew.tmp
 	crontab -l > $tmpfile
-	grep -v "sopdvr.sh"."$jobname" $tmpfile  > $tmpfilenew
+	grep -v "sopdvr.sh"."$jobname " $tmpfile  > $tmpfilenew
+	#cat $tmpfilenew > $tmpfile
+	#grep -v "sopdvr.sh"."$jobname kill " $tmpfile  > $tmpfilenew
 	crontab $tmpfilenew
 	rm $tmpfile
 	rm $tmpfilenew
+	rm $appfolder/sop.log $appfolder/$jobname.conf
 }
 
 checkstatus () {
@@ -250,6 +299,8 @@ checkstatus () {
 	jobname=$1
 	jobchannel=$2
 	jobfile=$3
+	jobportin=$4
+	jobportout=$5
 	check=1
 	newfile=1
 	retry=0	
@@ -263,9 +314,9 @@ checkstatus () {
 	###### USER EDITABLE FIELD BELOW ######
 	echo "Connection started: Checking connections."
 	while [ $check -le "$maxtime" ]; do
-		ps ax | grep -v grep | grep sp-sc.sop
+		ps ax | grep -v grep | grep "sp-sc.$jobchannel.$jobportin.$jobportout$"
 		if [ $? == "0" ]; then
-			ps ax | grep -v grep | grep vlc
+			ps ax | grep -v grep | grep "vlc.http://127.0.0.1:$jobportout/tv.asf"
 			if [ $? == "0" ]; then
 				echo "$jobfile.asf"
 				#File check is the size of the file currently filesize is previous.
@@ -298,9 +349,9 @@ checkstatus () {
 				echo "Stopping CVLC" && killall cvlc
 				#### Reconnect
 				echo "reconnecting to sopcast"
-				sopconnect $jobchannel
+				sopconnect $jobchannel $jobportin $jobportout
 				echo "restarting vlc player"
-				nohup cvlc http://127.0.0.1:8902/tv.asf --sout=file/asf:"$jobfile$newfile".asf &
+				nohup cvlc "http://127.0.0.1:$jobportout/tv.asf" --sout=file/asf:"$jobfile$newfile".asf &
 				newfile=$((nefile+1))
 				filesize="0"
 			fi		
@@ -311,24 +362,30 @@ checkstatus () {
 }
 
 showonly () {
+	randomport
+	jobportin=$ranport
+	randomport
+	jobportout=$ranport
 	sopchannel
-	if [ $? == 1 ]; then echo "sopchannel failed"; rm "$appfolder/$jobname.conf"; return; fi
+	if [ $? == 1 ]; then echo "sopchannel failed"; return; fi
 	echo $channelname
 	echo "Connecting to sopcast"
-	sopconnect $channelname
+	sopconnect $channelname $jobportin $jobportout
 	echo "Starting VLC"
-	vlc http://127.0.0.1:8902/tv.asf
+	vlc "http://127.0.0.1:$jobportout/tv.asf"
 	killall sp-sc && echo "Stopping sopcast Connection."
 }
 
 sopconnect () {
 	echo "Starting sop connect"
-	nohup sp-sc $1 8901 8902 > "$appfolder/log.txt" &
+	## no random ports
+	## nohup sp-sc $1 8901 8902 > "$appfolder/sop.log" &
+	nohup sp-sc $1 $2 $3 > "$appfolder/sop.log" &
 	echo "Waiting for connection to $1"
 	sleep 3
 	sopstarted="no"
 	(while [ $sopstarted != "yes" ]; do
-		grep "I START " "$appfolder/log.txt"
+		grep "I START " "$appfolder/sop.log"
 		if [ $? == "1" ]; then
 			echo "Sopcast not started"
 			sleep 1
@@ -347,28 +404,43 @@ recordonly () {
 	zenity --info --text="Choose the folder you would like to save recording to"
 	foldername=$(zenity --file-selection --directory)
 	if [ -z "$foldername" ]; then echo "Folder name read failed"; return; fi
-	nohup cvlc http://127.0.0.1:8902/tv.asf --sout=file/asf:"$foldername/$jobname".asf &
+	## Random	
+	randomport
+	jobportout=$ranport
+	nohup cvlc "http://127.0.0.1:$jobportout/tv.asf" --sout=file/asf:"$foldername/$jobname".asf &
+	randomport
+	jobportin=$ranport
 	sopchannel
 	if [ $? == 1 ]; then echo "sopchannel failed"; rm "$appfolder/$jobname.conf"; return; fi
 	echo $channelname
+	echo $channelname >> "$appfolder/$jobname.conf"
+	echo $jobportin >> "$appfolder/$jobname.conf"
+	echo $jobportout >> "$appfolder/$jobname.conf"
 	jobfile="$foldername/$jobname"
-	checkstatus $jobname $channelname $jobfile
+	checkstatus $jobname $channelname $jobfile $jobportin $jobportout
 }
 
 recordandshow () {
+	randomport
+	jobportin=$ranport
+	randomport
+	jobportout=$ranport
 	sopchannel
-	if [ $? == 1 ]; then echo "sopchannel failed"; rm "$appfolder/$jobname.conf"; return; fi
+	if [ $? == 1 ]; then echo "sopchannel failed"; return; fi
 	echo $channelname
 	echo "Connecting to sopcast"
-	nohup sp-sc $channelname 8901 8902 > "$appfolder/log.txt"  &
+	nohup sp-sc $channelname $jobportin $jobportout > "$appfolder/sop.log"  &
 	jobname=$(zenity --entry --text="Save file name. \n\nNO SPACES")
 	if [ -z "$jobname" ]; then echo "Job name read failed"; return; fi
 	zenity --info --text="Choose the folder you would like to save recording to"
 	foldername=$(zenity --file-selection --directory)
+	echo $channelname >> "$appfolder/$jobname.conf"
+	echo $jobportin >> "$appfolder/$jobname.conf"
+	echo $jobportout >> "$appfolder/$jobname.conf"
 	if [ -z "$foldername" ]; then echo "Folder name read failed"; return; fi
 	sopstarted="no"
 	(while [ $sopstarted != "yes" ]; do
-		grep "I START " "$appfolder/log.txt"
+		grep "I START " "$appfolder/sop.log"
 		if [ $? == "1" ]; then
 			echo "Sopcast not started"
 			sleep 1
@@ -379,12 +451,12 @@ recordandshow () {
 	done) | zenity --progress --pulsate --text="Connecting to Sopcast channel: \n$channelname" --auto-close --no-cancel
 	sleep 1
 	echo "Starting VLC"
-	nohup vlc http://127.0.0.1:8902/tv.asf &
+	nohup vlc "http://127.0.0.1:$jobportout/tv.asf" &
 	echo Create new recording	
-	nohup cvlc http://127.0.0.1:8902/tv.asf --sout=file/asf:"$foldername/$jobname".asf &
+	nohup cvlc "http://127.0.0.1:$jobportout/tv.asf" --sout=file/asf:"$foldername/$jobname".asf &
 	jobfile="$foldername/$jobname"
 	echo "BE SURE TO KILL SP-SC WHEN YOU ARE DONE 'killall sp-sc'"
-	checkstatus $jobname $channelname $jobfile
+	checkstatus $jobname $channelname $jobfile $jobportin $jobportout
 }
 
 stoprec () {
@@ -393,6 +465,7 @@ stoprec () {
 		jobname=$(zenity --entry --text="Please type the job name to stop.")
 		if [ -z "$jobname" ]; then echo "Job name read failed"; return; fi
 		killjob $jobname
+		rm $appfolder/sop.log $appfolder/$jobname.conf
 	else
 		zenity --question --text="Do you also want to clear crontab of all jobs?"
 		if [ $? == "0" ]; then
@@ -405,36 +478,12 @@ stoprec () {
 	fi
 }
 
-advancemenu () {
-	quitadv="no"
-
-	while [ $quitadv != "yes" ]; do				
-		choice=$(zenity --list --height=225 --width=225 --text="Choose what operation you would like to complete." \
-			--column=Channel --column=Name \
-			"1" "Clean Crontab" \
-			"2" "Clean nohup file" \
-			"3" "asdfasdf" \
-			"4" "test" \
-			"5" "Back" \
-		)
-		case $choice in
-			1) cleancron ;;
-			2) rm nohup.out ;;
-			3) echo "test" ;;
-			4) echo "test" ;;
-			5) quitadv="yes" ;;
-			*) echo "\"$choice\" is not valid"
-			sleep 1 ;;
-		esac
-	done
-}
-
 cleancron () {
 	echo "KILL KILL KILL"
 		#kill still recording sh session.
 		psid="start"
 		while [ "$psid" != "end" ]; do
-			psid=$(ps ax | grep -v grep | grep "sopdvr.sh $jobname start"| awk '{print$1}')
+			psid=$(ps ax | grep -v grep | grep "sopdvr.sh * start"| awk '{print$1}')
 			if [ -z "$psid" ]; then psid="end"; fi
 			echo "Process ID = $psid"
 			kill -9 $psid
@@ -442,7 +491,7 @@ cleancron () {
 		echo "Script Killed"
 		psid="start"
 		while [ "$psid" != "end" ]; do
-			psid=$(ps ax | grep -v grep | grep "sopdvr.sh $jobname start"| awk '{print$1}')
+			psid=$(ps ax | grep -v grep | grep "sopdvr.sh * kill"| awk '{print$1}')
 			if [ -z "$psid" ]; then psid="end"; fi			
 			echo "Process ID = $psid"
 			kill -9 $psid
@@ -458,6 +507,77 @@ cleancron () {
 		crontab $tmpfilenew
 		rm $tmpfile
 		rm $tmpfilenew
+		rm $appfolder/*.log $appfolder/*.conf 
+}
+
+advancemenu () {
+	quitadv="no"
+
+	while [ $quitadv != "yes" ]; do				
+		choice=$(zenity --list --height=225 --width=225 --text="Choose what operation you would like to complete." \
+			--column=Channel --column=Name \
+			"1" "Clean Crontab" \
+			"2" "Clean nohup file" \
+			"3" "Install Sopcst player GUI" \
+			"4" "test" \
+			"5" "Back" \
+		)
+		case $choice in
+			1) cleancron ;;
+			2) rm nohup.out ;;
+			3) sopguiinstall ;;
+			4) randomport; echo $ranport ;;
+			5) quitadv="yes" ;;
+			"") echo "Quitting" ; quitadv="yes" ;;
+			*) echo "\"$choice\" is not valid"
+			sleep 1 ;;
+		esac
+	done
+}
+
+sopguiinstall () {
+	zenity --question --text="Do you want to install sopcast Player Gui?"
+	if [ $? == "0" ]; then
+		echo "Install"
+		echo "Downloading sopcast gui"
+		rm sopcast-player-0.8.5.tar.gz*
+		wget "http://sopcast-player.googlecode.com/files/sopcast-player-0.8.5.tar.gz"
+		if [ $? == "0" ]; then
+			echo "Download of sopcast-player-0.8.5.tar.gz completed"
+		else
+			zenity --error --text="Download of sp-sc FAILED"
+			rm sp-auth.tgz*
+			return 1
+		fi
+		echo "Extracting"
+		sleep 2
+		tar xfzv "sopcast-player-0.8.5.tar.gz"
+		if [ $? == "0" ]; then
+			echo "Extraction of sopcast-player-0.8.5.tar.gz completed"
+		else
+			zenity --error --text="Extraction of sopcast-player-0.8.5.tar.gz FAILED"
+			echo "Sudo command sop-player: rm -r sopcast-player-0.8.5.tar.gz sop-player"			
+			sudo rm -r sopcast-player-0.8.5.tar.gz sop-player
+			return 1
+		fi
+		cd sopcast-player
+		make
+		echo "Sudo command sop-player: sudo make install"
+		sudo make install
+		if [ $? == "0" ]; then
+			echo "Copying of  completed"
+		else
+			zenity --error --text="Copying of  FAILED"
+			echo "Sudo command sop-player: rm -r sopcast-player-0.8.5.tar.gz sop-player"			
+			sudo rm -r sopcast-player-0.8.5.tar.gz sop-player
+			return 1
+		fi
+		echo "installed"
+		echo "Sudo command sop-player: rm -r sopcast-player-0.8.5.tar.gz sop-player"			
+		sudo rm -r sopcast-player-0.8.5.tar.gz sop-player							
+	else
+		return 0
+	fi
 }
 
 softwarecheck () {
@@ -480,7 +600,7 @@ softwarecheck () {
 	fi
 	
 	echo "Checking for sp-sc"
-	swcheck=$(sp --version)	
+	swcheck=$(sp-sc --version)	
 	if [ -z "$swcheck" ]; then		
 		zenity --question --height=100 --width=400 --text="Sopcast not instaled correctly:\n\nsp-sc command not found\n\nDo you want to skip this check?\n\n\nChoose no for an option to install software"
 		if [ $? == "1" ]; then
@@ -595,6 +715,7 @@ if [ -z "$1" ]; then
 
 	quit="no"
 	softwarecheck
+	clear
 	while [ $quit != "yes" ]; do				
 		choice=$(zenity --list --height=310 --width=225 --text="Choose what operation you would like to complete." \
 		--column=Channel --column=Name \

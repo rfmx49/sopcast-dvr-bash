@@ -1,7 +1,7 @@
 TO DO list
 
 A | User configurations
-B | Output log
+*Not possible with out changing every connamd in code, works on automated runnings.B | Output log
 *DONE C | Check for vlc, cvlc, zenity, sp-sc
 D | External channel list
 E | HQ Recording fix
@@ -9,5 +9,5 @@ F | Keep nohup size down
 G | Test VLC failures/stream lag.
 *DONE H | Test zenity dialogs while using cron.
 I | Muiltiple Recordings
-J | Advance option to install sopcast gui
+*Done J | Advance option to install sopcast gui
 K | Clean up finished jobs
