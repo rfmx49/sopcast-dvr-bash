@@ -460,11 +460,141 @@ cleancron () {
 		rm $tmpfilenew
 }
 
+softwarecheck () {
+	echo "Checking for zenity"
+	swcheck=$(zenity --version)	
+	if [ -z "$swcheck" ]; then		
+		echo "ZENITY NOT FOUND INSTALL ZENITY! sudo apt-get install zenity"
+		wait 1
+		echo "Do you want to install zenity? y or n"
+		read zenans
+			if [ "$zenans" == "y" ]; then
+				echo "command to be run: sudo apt-get install zenity"
+				sudo apt-get install zenity
+			else
+				return 1
+			fi
+		
+	else
+		echo "zenity installed"
+	fi
+	
+	echo "Checking for sp-sc"
+	swcheck=$(sp-sc --version)	
+	if [ -z "$swcheck" ]; then		
+		zenity --question --text="Sopcast not instaled correctly:\n\nsp-sc command not found\n\nDo you want to skip this check?\n\nChoose no for an option to install software"
+		if [ $? == "1" ]; then
+			zenity --question --text="Do you want to install missing software now?"
+			if [ $? == "0" ]; then
+				echo "Install"
+				echo "Downloading sopcast sp-sc-auth / sp-sc"
+				rm sp-auth.tgz*
+				wget "http://download.easetuner.com/download/sp-auth.tgz"
+				if [ $? == "0" ]; then
+					echo "Download of sp-sc completed"
+				else
+					zenity --error --text="Download of sp-sc FAILED"
+					rm sp-auth.tgz*
+					return 1
+				fi
+				
+				echo "Downloading libstdcpp5"
+				rm libstdcpp5.tgz*
+				wget "http://www.sopcast.com/download/libstdcpp5.tgz"
+				if [ $? == "0" ]; then
+					echo "Download of libstdcpp5.tgz completed"
+				else
+					zenity --error --text="Download of libstdcpp5.tgz FAILED"
+					rm libstdcpp5.tgz*
+					return 1
+				fi
+				echo "Extracting"
+				sleep 2
+				tar xfzv "sp-auth.tgz"
+				if [ $? == "0" ]; then
+					echo "Extraction of sp-auth.tgz completed"
+				else
+					zenity --error --text="Extraction of sp-auth.tgz FAILED"
+					rm -r libstdcpp5.tgz* sp-auth.tgz* usr sp-auth
+					return 1
+				fi
+				tar xfzv "libstdcpp5.tgz"
+				if [ $? == "0" ]; then
+					echo "Extraction of libstdcpp5.tgz completed"
+				else
+					zenity --error --text="Extraction of libstdcpp5.tgz FAILED"
+					rm -r libstdcpp5.tgz* sp-auth.tgz* usr sp-auth
+					return 1
+				fi
+				echo "Sudo command: sudo cp -a usr/lib/libstdc++.so.5* /usr/lib"
+				echo "Sudo command 2: sudo cp -a sp-auth/sp-sc-auth /usr/lib/sp-sc"
+				sudo cp -a usr/lib/libstdc++.so.5* /usr/lib
+				if [ $? == "0" ]; then
+					echo "Copying of libstdcpp5.tgz completed"
+				else
+					zenity --error --text="Copying of libstdcpp5.tgz FAILED"
+					rm -r libstdcpp5.tgz* sp-auth.tgz* usr sp-auth
+					return 1
+				fi
+				sudo cp -a sp-auth/sp-sc-auth /usr/bin/sp-sc
+				if [ $? == "0" ]; then
+					echo "Copying of libstdcpp5.tgz completed"
+				else
+					zenity --error --text="Copying of libstdcpp5.tgz FAILED"
+					rm -r libstdcpp5.tgz* sp-auth.tgz* usr sp-auth
+					return 1
+				fi
+				echo "installed"
+				rm -r libstdcpp5.tgz* sp-auth.tgz* usr sp-auth							
+			else
+				return 1
+			fi
+		fi
+	else
+		echo "sp-sc installed"
+	fi
+
+	echo "Checking for vlc"
+	swcheck=$(vlc --version)	
+	if [ -z "$swcheck" ]; then		
+		zenity --question --text="VLC player not instaled correctly:\n\nvlc command not found\n\nDo you want to skip this check?\n\nChoose no for an option to install software"
+		if [ $? == "1" ]; then
+			zenity --question --text="Do you want to install missing software now?"
+			if [ $? == "0" ]; then
+				echo "Install"
+				echo "Command to be run sudo apt-get install vlc cvlc"
+				sudo apt-get install vlc cvlc
+			else
+				return 1
+			fi
+		fi
+	else
+		echo "vlc installed"
+	fi
+
+	echo "Checking for cvlc"
+	swcheck=$(cvlc --version)	
+	if [ -z "$swcheck" ]; then		
+		zenity --question --text="Commandline vlc not instaled correctly:\n\ncvlc command not found\n\nDo you want to skip this check?\n\nChoose no for an option to install software"
+		if [ $? == "1" ]; then
+			zenity --question --text="Do you want to install missing software now?"
+			if [ $? == "0" ]; then
+				echo "Install"
+				echo "Command to be run sudo apt-get install cvlc"
+				sudo apt-get install cvlc
+			else
+				return 1
+			fi
+		fi
+	else
+		echo "cvlc installed"
+	fi	
+}
 ###USER MENU####
 if [ -z "$1" ]; then
 
 	quit="no"
-	
+	softwarecheck
 	while [ $quit != "yes" ]; do				
 		choice=$(zenity --list --height=310 --width=225 --text="Choose what operation you would like to complete." \
 		--column=Channel --column=Name \
