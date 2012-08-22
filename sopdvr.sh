@@ -480,9 +480,9 @@ softwarecheck () {
 	fi
 	
 	echo "Checking for sp-sc"
-	swcheck=$(sp-sc --version)	
+	swcheck=$(sp --version)	
 	if [ -z "$swcheck" ]; then		
-		zenity --question --text="Sopcast not instaled correctly:\n\nsp-sc command not found\n\nDo you want to skip this check?\n\nChoose no for an option to install software"
+		zenity --question --height=100 --width=400 --text="Sopcast not instaled correctly:\n\nsp-sc command not found\n\nDo you want to skip this check?\n\n\nChoose no for an option to install software"
 		if [ $? == "1" ]; then
 			zenity --question --text="Do you want to install missing software now?"
 			if [ $? == "0" ]; then
@@ -557,7 +557,7 @@ softwarecheck () {
 	echo "Checking for vlc"
 	swcheck=$(vlc --version)	
 	if [ -z "$swcheck" ]; then		
-		zenity --question --text="VLC player not instaled correctly:\n\nvlc command not found\n\nDo you want to skip this check?\n\nChoose no for an option to install software"
+		zenity --question --text="VLC player not instaled correctly:\n\nvlc command not found\n\nDo you want to skip this check?\n\n\nChoose no for an option to install software"
 		if [ $? == "1" ]; then
 			zenity --question --text="Do you want to install missing software now?"
 			if [ $? == "0" ]; then
@@ -575,7 +575,7 @@ softwarecheck () {
 	echo "Checking for cvlc"
 	swcheck=$(cvlc --version)	
 	if [ -z "$swcheck" ]; then		
-		zenity --question --text="Commandline vlc not instaled correctly:\n\ncvlc command not found\n\nDo you want to skip this check?\n\nChoose no for an option to install software"
+		zenity --question --text="Commandline vlc not instaled correctly:\n\ncvlc command not found\n\nDo you want to skip this check?\n\n\nChoose no for an option to install software"
 		if [ $? == "1" ]; then
 			zenity --question --text="Do you want to install missing software now?"
 			if [ $? == "0" ]; then
