@@ -155,7 +155,13 @@ cronend () {
 	)
 	if [ -z "$cronendt" ]; then
 		echo "cronendt verify failed clearing crontab"
-		killjob $jobname
+		echo "$appfolder/$jobname.conf"
+		jobfile=$(<"$appfolder/$jobname.conf")
+		set -- $jobfile
+		jobportin=$4
+		jobportout=$5
+		jobchannel=$3
+		killjob $jobname $jobchannel $jobportin $jobportout
 		rm "$appfolder/$jobname.conf"
 		return 1
 	fi
@@ -231,7 +237,13 @@ recordnow () {
 	clear
 	jobname=$1
 	if [ "$2" = "kill" ]; then
-		killjob $jobname
+		echo "$appfolder/$jobname.conf"
+		jobfile=$(<"$appfolder/$jobname.conf")
+		set -- $jobfile
+		jobportin=$4
+		jobportout=$5
+		jobchannel=$3
+		killjob $jobname $jobchannel $jobportin $jobportout
 	else	
 		echo "$appfolder/$jobname.conf"
 		jobfile=$(<"$appfolder/$jobname.conf")
@@ -242,9 +254,7 @@ recordnow () {
 		jobfile=$2
 		echo "recording channel $jobchannel $jobportin $jobportout for job $jobname saving to $jobfile.asf"
 		####FROM AUTOSOP.SH
-		echo "Stopping VLC Recording" && killall vlc
-		echo "Stopping CVLC" && killall cvlc
-		echo "Stopping Sopcast Connection" && killall sp-sc
+		killallreplace $jobchannel $jobportin $jobportout
 		sopconnect $jobchannel $jobportin $jobportout
 		echo "Attemting to record $jobchannel"
 		echo 'VLC Starting'
@@ -257,43 +267,6 @@ recordnow () {
 	fi
 }
 
-killallreplace () {
-	##replaces killall vlc && killall sp-sc
-	#psid=$(ps ax | grep -v grep | grep "sopdvr.sh $jobname start"| awk '{print$1}')
-	jobchannel=$1
-	jobportin=$2
-	jobportout=$3
-	psid=$(ps ax | grep -v grep | grep "sp-sc.$jobchannel.$jobportin.$jobportout$")
-	psid=$(ps ax | grep -v grep | grep "vlc.http://127.0.0.1:$jobportout/tv.asf")
-}
-
-killjob () {
-	jobname=$1
-	echo "KILL KILL KILL $jobname job"
-	#kill still recording sh session.
-	psid="start"
-	while [ "$psid" != "end" ]; do
-		psid=$(ps ax | grep -v grep | grep "sopdvr.sh $jobname start"| awk '{print$1}')
-		if [ -z "$psid" ]; then psid="end"; fi
-		echo "Process ID = $psid"
-		kill -9 $psid
-	done
-	echo "Script Killed"
-	echo "Stopping VLC Recording" && killall vlc
-	echo "Stopping CVLC" && killall cvlc
-	echo "Stopping Sopcast Connection" && killall sp-sc
-	tmpfile=/tmp/cron.tmp
-	tmpfilenew=/tmp/cronnew.tmp
-	crontab -l > $tmpfile
-	grep -v "sopdvr.sh"."$jobname " $tmpfile  > $tmpfilenew
-	#cat $tmpfilenew > $tmpfile
-	#grep -v "sopdvr.sh"."$jobname kill " $tmpfile  > $tmpfilenew
-	crontab $tmpfilenew
-	rm $tmpfile
-	rm $tmpfilenew
-	rm $appfolder/sop.log $appfolder/$jobname.conf
-}
-
 checkstatus () {
 	###Check for file creation
 	jobname=$1
@@ -301,8 +274,9 @@ checkstatus () {
 	jobfile=$3
 	jobportin=$4
 	jobportout=$5
+	showaswell=$6
 	check=1
-	newfile=1
+	newfile="1"
 	retry=0	
 	fail="false"
 	filesize=0
@@ -316,19 +290,19 @@ checkstatus () {
 	while [ $check -le "$maxtime" ]; do
 		ps ax | grep -v grep | grep "sp-sc.$jobchannel.$jobportin.$jobportout$"
 		if [ $? == "0" ]; then
-			ps ax | grep -v grep | grep "vlc.http://127.0.0.1:$jobportout/tv.asf"
+			ps ax | grep -v grep | grep "http://127.0.0.1:$jobportout/tv.asf --sout"
 			if [ $? == "0" ]; then
 				echo "$jobfile.asf"
 				#File check is the size of the file currently filesize is previous.
 				filecheck=$(stat -c%s "$jobfile.asf")
 				echo $filecheck "is newfile size"
-				if [ $filecheck -gt $filesize ]; then
+				if [ "$filecheck" != "$filesize" ]; then
 					filesize=$filecheck
 					check=$((check+1))
 					fail="false"
 				else
 					fail="true"
-					echo "Failed Size no increasing streaming not recording"							
+					echo "Failed Size not increasing streaming not recording"							
 				fi
 			else
 				fail="true"
@@ -344,14 +318,22 @@ checkstatus () {
 				exit
 			else
 				echo STREAM FAILED
-				echo "Stopping Sopcast Connection" && killall sp-sc
-				echo "Stopping VLC Recording" && killall vlc
-				echo "Stopping CVLC" && killall cvlc
+				killallreplace $jobchannel $jobportin $jobportout
+				if [ "$showaswell" == "true" ]; then
+					psid=$(ps ax | grep -v grep | grep "vlc.dhttp://127.0.0.1:$jobportout/tv.asf"| awk '{print$1}')
+					echo "Process ID of vlc job = $psid will be killed"
+					kill -9 $psid
+				fi
 				#### Reconnect
 				echo "reconnecting to sopcast"
 				sopconnect $jobchannel $jobportin $jobportout
 				echo "restarting vlc player"
+				echo nohup cvlc "http://127.0.0.1:$jobportout/tv.asf" --sout=file/asf:"$jobfile$newfile".asf &
+				sleep 3				
 				nohup cvlc "http://127.0.0.1:$jobportout/tv.asf" --sout=file/asf:"$jobfile$newfile".asf &
+				if [ "$showaswell" == "true" ]; then
+					nohup vlc "http://127.0.0.1:$jobportout/tv.asf"
+				fi
 				newfile=$((nefile+1))
 				filesize="0"
 			fi		
@@ -373,7 +355,7 @@ showonly () {
 	sopconnect $channelname $jobportin $jobportout
 	echo "Starting VLC"
 	vlc "http://127.0.0.1:$jobportout/tv.asf"
-	killall sp-sc && echo "Stopping sopcast Connection."
+	killallreplace $jobchannel $jobportin $jobportout #replace
 }
 
 sopconnect () {
@@ -384,11 +366,21 @@ sopconnect () {
 	echo "Waiting for connection to $1"
 	sleep 3
 	sopstarted="no"
+	timeout=1
 	(while [ $sopstarted != "yes" ]; do
 		grep "I START " "$appfolder/sop.log"
 		if [ $? == "1" ]; then
 			echo "Sopcast not started"
 			sleep 1
+			timeout=$((timeout+1))
+			if [ "$timeout" == "32" ]; then
+				nohup zenity --error --text="Connection timed out 30s" &
+				psid=$(ps ax | grep -v grep | grep "sp-sc.$1.$2.$3"| awk '{print$1}')
+				echo "Process ID of sp-sc job = $psid will be killed"
+				kill -9 $psid
+				nohup sp-sc $1 $2 $3 > "$appfolder/sop.log" &
+				timeout=1
+			fi
 		else
 			echo "Sopcast connected"
 			sopstarted="yes"
@@ -399,6 +391,8 @@ sopconnect () {
 
 recordonly () {
 	echo Create new recording
+	echo "currently broken"
+	return 1
 	jobname=$(zenity --entry --text="Save file name. \n\nNO SPACES")
 	if [ -z "$jobname" ]; then echo "Job name read failed"; return; fi
 	zenity --info --text="Choose the folder you would like to save recording to"
@@ -426,12 +420,19 @@ recordandshow () {
 	randomport
 	jobportout=$ranport
 	sopchannel
+	showandtell="true"
 	if [ $? == 1 ]; then echo "sopchannel failed"; return; fi
 	echo $channelname
 	echo "Connecting to sopcast"
 	nohup sp-sc $channelname $jobportin $jobportout > "$appfolder/sop.log"  &
 	jobname=$(zenity --entry --text="Save file name. \n\nNO SPACES")
-	if [ -z "$jobname" ]; then echo "Job name read failed"; return; fi
+	if [ -z "$jobname" ]; then 
+		echo "Job name read failed"
+		psid=$(ps ax | grep -v grep | grep "sp-sc.$channelname $jobportin $jobportout"| awk '{print$1}')
+		echo "Process ID of sp-sc job = $psid will be killed"
+		kill -9 $psid
+		return
+	fi
 	zenity --info --text="Choose the folder you would like to save recording to"
 	foldername=$(zenity --file-selection --directory)
 	echo $channelname >> "$appfolder/$jobname.conf"
@@ -439,11 +440,23 @@ recordandshow () {
 	echo $jobportout >> "$appfolder/$jobname.conf"
 	if [ -z "$foldername" ]; then echo "Folder name read failed"; return; fi
 	sopstarted="no"
+	timeout=1
 	(while [ $sopstarted != "yes" ]; do
 		grep "I START " "$appfolder/sop.log"
 		if [ $? == "1" ]; then
 			echo "Sopcast not started"
 			sleep 1
+			timeout=$((timeout+1))
+			if [ "$timeout" == "32" ]; then
+				nohup zenity --error --text="Connection timed out 30s" &
+				psid=$(ps ax | grep -v grep | grep "sp-sc.$channelname $jobportin $jobportout"| awk '{print$1}')
+				echo "Process ID of sp-sc job = $psid will be killed"
+				kill -9 $psid
+				timeout=1
+				nohup sp-$channelname $jobportin $jobportout > "$appfolder/sop.log" &
+				sleep 3
+				
+			fi
 		else
 			echo "Sopcast connected"
 			sopstarted="yes"
@@ -456,7 +469,50 @@ recordandshow () {
 	nohup cvlc "http://127.0.0.1:$jobportout/tv.asf" --sout=file/asf:"$foldername/$jobname".asf &
 	jobfile="$foldername/$jobname"
 	echo "BE SURE TO KILL SP-SC WHEN YOU ARE DONE 'killall sp-sc'"
-	checkstatus $jobname $channelname $jobfile $jobportin $jobportout
+	nohup zenity --info --text="To stop you will have to relaunch the application and choose the Stop recording option in the menu remember the job name is $jobname" &
+	checkstatus $jobname $channelname $jobfile $jobportin $jobportout $showandtelll
+}
+
+killallreplace () {
+	##replaces killall vlc && killall sp-sc
+	#psid=$(ps ax | grep -v grep | grep "sopdvr.sh $jobname start"| awk '{print$1}')
+	jobchannel=$1
+	jobportin=$2
+	jobportout=$3
+	psid=$(ps ax | grep -v grep | grep "sp-sc.$jobchannel.$jobportin.$jobportout"| awk '{print$1}')
+	echo "Process ID of sp-sc job = $psid will be killed"
+	kill -9 $psid
+	psid=$(ps ax | grep -v grep | grep "http://127.0.0.1:$jobportout/tv.asf --sout"| awk '{print$1}')
+	echo "Process ID of vlc job = $psid will be killed"
+	kill -9 $psid
+}
+
+killjob () {
+	jobname=$1
+	jobchannel=$2
+	jobportin=$3
+	jobportout=$4
+	echo "KILL KILL KILL $jobname job"
+	#kill still recording sh session.
+	psid="start"
+	while [ "$psid" != "end" ]; do
+		psid=$(ps ax | grep -v grep | grep "sopdvr.sh $jobname start"| awk '{print$1}')
+		if [ -z "$psid" ]; then psid="end"; fi
+		echo "Process ID = $psid"
+		kill -9 $psid
+	done
+	echo "Script Killed"
+	killallreplace $jobchannel $jobportin $jobportout
+	tmpfile=/tmp/cron.tmp
+	tmpfilenew=/tmp/cronnew.tmp
+	crontab -l > $tmpfile
+	grep -v "sopdvr.sh"."$jobname " $tmpfile  > $tmpfilenew
+	#cat $tmpfilenew > $tmpfile
+	#grep -v "sopdvr.sh"."$jobname kill " $tmpfile  > $tmpfilenew
+	crontab $tmpfilenew
+	rm $tmpfile
+	rm $tmpfilenew
+	rm $appfolder/sop.log $appfolder/$jobname.conf
 }
 
 stoprec () {
@@ -464,7 +520,14 @@ stoprec () {
 	if [ $? == "0" ]; then
 		jobname=$(zenity --entry --text="Please type the job name to stop.")
 		if [ -z "$jobname" ]; then echo "Job name read failed"; return; fi
-		killjob $jobname
+		echo "$appfolder/$jobname.conf"
+		jobfile=$(<"$appfolder/$jobname.conf")
+		set -- $jobfile
+		jobportin=$4
+		jobportout=$5
+		jobchannel=$3
+		jobfile=$2
+		killjob $jobname $jobchannel $jobportin $jobportout
 		rm $appfolder/sop.log $appfolder/$jobname.conf
 	else
 		zenity --question --text="Do you also want to clear crontab of all jobs?"
