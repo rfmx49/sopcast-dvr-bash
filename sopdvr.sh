@@ -258,12 +258,12 @@ recordnow () {
 		sopconnect $jobchannel $jobportin $jobportout
 		echo "Attemting to record $jobchannel"
 		echo 'VLC Starting'
-		nohup cvlc "http://127.0.0.1:$jobportout/tv.asf" --sout=file/asf:"$jobfile".asf &
+		nohup cvlc "http://127.0.0.1:$jobportout/tv.asf" :demux=dump :demuxdump-file="$jobfile".asf &
 		echo 'done'
 
 		sleep 15
 
-		checkstatus $jobname $jobchannel $jobfile $jobportin $jobportout
+		#checkstatus $jobname $jobchannel $jobfile $jobportin $jobportout
 	fi
 }
 
@@ -290,7 +290,7 @@ checkstatus () {
 	while [ $check -le "$maxtime" ]; do
 		ps ax | grep -v grep | grep "sp-sc.$jobchannel.$jobportin.$jobportout$"
 		if [ $? == "0" ]; then
-			ps ax | grep -v grep | grep "http://127.0.0.1:$jobportout/tv.asf --sout"
+			ps ax | grep -v grep | grep "http://127.0.0.1:$jobportout/tv.asf :demux=dump"
 			if [ $? == "0" ]; then
 				echo "$jobfile.asf"
 				#File check is the size of the file currently filesize is previous.
@@ -328,9 +328,8 @@ checkstatus () {
 				echo "reconnecting to sopcast"
 				sopconnect $jobchannel $jobportin $jobportout
 				echo "restarting vlc player"
-				echo nohup cvlc "http://127.0.0.1:$jobportout/tv.asf" --sout=file/asf:"$jobfile$newfile".asf &
 				sleep 3				
-				nohup cvlc "http://127.0.0.1:$jobportout/tv.asf" --sout=file/asf:"$jobfile$newfile".asf &
+				nohup cvlc "http://127.0.0.1:$jobportout/tv.asf" :demux=dump :demuxdump-file="$jobfile$newfile".asf &
 				if [ "$showaswell" == "true" ]; then
 					nohup vlc "http://127.0.0.1:$jobportout/tv.asf"
 				fi
@@ -401,7 +400,7 @@ recordonly () {
 	## Random	
 	randomport
 	jobportout=$ranport
-	nohup cvlc "http://127.0.0.1:$jobportout/tv.asf" --sout=file/asf:"$foldername/$jobname".asf &
+	nohup cvlc "http://127.0.0.1:$jobportout/tv.asf" :demux=dump :demuxdump-file="$foldername/$jobname".asf &
 	randomport
 	jobportin=$ranport
 	sopchannel
@@ -466,7 +465,7 @@ recordandshow () {
 	echo "Starting VLC"
 	nohup vlc "http://127.0.0.1:$jobportout/tv.asf" &
 	echo Create new recording	
-	nohup cvlc "http://127.0.0.1:$jobportout/tv.asf" --sout=file/asf:"$foldername/$jobname".asf &
+	nohup cvlc "http://127.0.0.1:$jobportout/tv.asf" :demux=dump :demuxdump-file="$foldername/$jobname".asf &
 	jobfile="$foldername/$jobname"
 	echo "BE SURE TO KILL SP-SC WHEN YOU ARE DONE 'killall sp-sc'"
 	nohup zenity --info --text="To stop you will have to relaunch the application and choose the Stop recording option in the menu remember the job name is $jobname" &
@@ -482,7 +481,7 @@ killallreplace () {
 	psid=$(ps ax | grep -v grep | grep "sp-sc.$jobchannel.$jobportin.$jobportout"| awk '{print$1}')
 	echo "Process ID of sp-sc job = $psid will be killed"
 	kill -9 $psid
-	psid=$(ps ax | grep -v grep | grep "http://127.0.0.1:$jobportout/tv.asf --sout"| awk '{print$1}')
+	psid=$(ps ax | grep -v grep | grep "http://127.0.0.1:$jobportout/tv.asf :demux=dump"| awk '{print$1}')
 	echo "Process ID of vlc job = $psid will be killed"
 	kill -9 $psid
 }
