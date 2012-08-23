@@ -3,6 +3,7 @@ sopcast-dvr-bash
 
 Sopcast DVR allows you to record sopcast channels in Ubuntu. Schedule sopcast jobs with crontab.
 
+Before starting make sure that your crontab file has been created run crontab -e and make sure it shows your cron tab.
 
 System requirements:
 -uses zenity dialogue boxes.
