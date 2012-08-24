@@ -176,7 +176,7 @@ cronend () {
 
 ####JOB CREATION
 creation () {
-	echo Create new recording
+	echo "Create new recording"
 	jobname=$(zenity --entry --text="Job name. \n\nNO SPACES")
 	if [ -z "$jobname" ]; then echo "Job name read failed"; return; fi
 	echo $jobname > "$appfolder/$jobname.conf"
@@ -709,7 +709,7 @@ softwarecheck () {
 					return 1
 				fi
 				echo "Sudo command: sudo cp -a usr/lib/libstdc++.so.5* /usr/lib"
-				echo "Sudo command 2: sudo cp -a sp-auth/sp-sc-auth /usr/lib/sp-sc"
+				echo "Sudo command 2: sudo cp -a sp-auth/sp-sc-auth /usr/bin/sp-sc"
 				sudo cp -a usr/lib/libstdc++.so.5* /usr/lib
 				if [ $? == "0" ]; then
 					echo "Copying of libstdcpp5.tgz completed"
@@ -720,9 +720,9 @@ softwarecheck () {
 				fi
 				sudo cp -a sp-auth/sp-sc-auth /usr/bin/sp-sc
 				if [ $? == "0" ]; then
-					echo "Copying of libstdcpp5.tgz completed"
+					echo "Copying of sp-auth/sp-sc-auth to /usr/bin completed"
 				else
-					zenity --error --text="Copying of libstdcpp5.tgz FAILED"
+					zenity --error --text="Copying of sp-auth/sp-sc-auth to /usr/bin FAILED"
 					rm -r libstdcpp5.tgz* sp-auth.tgz* usr sp-auth
 					return 1
 				fi
