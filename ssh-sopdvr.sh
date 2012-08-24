@@ -116,6 +116,7 @@ cronstart () {
 	clear
 	cron="$cronminute $cronhour $crondate $cronmonth $cronday cd $appfolder && $appfolder/ssh-sopdvr.sh $jobname start >> $jobname.log"
 	echo "The following will be written to your crontab file. Press enter to continue press Ctrl+C to quit"
+	echo "$jobname will start recording the $crondate day of the $cronmonth month at $cronhour:$cronminute."	
 	echo
 	echo "$cron"
 	echo
@@ -127,8 +128,6 @@ cronstart () {
 	echo $cron >> $tmpfile
 	crontab $tmpfile
 	rm $tmpfile
-	clear
-	echo "done cron start time"
 }
 
 cronend () {
@@ -195,6 +194,7 @@ cronend () {
 	clear
 	cronendt="$cronminuteend $cronhourend $crondateend $cronmonthend $crondayend cd $appfolder && $appfolder/sopdvr.sh $jobname kill >> $jobname.log"
 	echo "The following will be written to your crontab file. Press enter to continue press Ctrl+C to quit"
+	echo "$jobname will stop recording the $crondateend day of the $cronmonthend month at $cronhourend:$cronminuteend"
 	echo
 	echo "$cronendt"
 	echo
@@ -207,7 +207,6 @@ cronend () {
 	crontab $tmpfile
 	rm $tmpfile
 }
-
 
 ####JOB CREATION
 creation () {
@@ -340,6 +339,7 @@ checkstatus () {
 	jobportin=$4
 	jobportout=$5
 	check=1
+	x=1
 	newfile="1"
 	retry=0	
 	fail="false"
@@ -350,31 +350,35 @@ checkstatus () {
 	maxtime=500
 	maxretry=20
 	###### USER EDITABLE FIELD BELOW ######
+	clear
 	echo "Connection started: Checking connections."
 	while [ $check -le "$maxtime" ]; do
 		ps ax | grep -v grep | grep "sp-sc.$jobchannel.$jobportin.$jobportout$"
 		if [ $? == "0" ]; then
+			echo "Sopcast stream is still running. :)"
 			ps ax | grep -v grep | grep "http://127.0.0.1:$jobportout/tv.asf :demux=dump"
 			if [ $? == "0" ]; then
-				echo "$jobfile.asf"
+				echo "VLC Recording is still running. :)"
+				echo "Checking size of $jobfile.asf"
 				#File check is the size of the file currently filesize is previous.
 				filecheck=$(stat -c%s "$jobfile.asf")
-				echo $filecheck "is newfile size"
+				echo "$filecheck is newfile size previous size is $filesize"
 				if [ "$filecheck" != "$filesize" ]; then
+					echo "File size is increasing :)"
 					filesize=$filecheck
 					check=$((check+1))
 					fail="false"
 				else
 					fail="true"
-					echo "Failed Size not increasing streaming not recording"							
+					echo "Failed Size not increasing streaming not recording :("							
 				fi
 			else
 				fail="true"
-				echo "Failed vlc not running"				
+				echo "Failed vlc not running :("				
 			fi
 		else
 			fail="true"
-			echo "Failed sp-sc not running"
+			echo "Failed sp-sc not running :("
 		fi
 		if [ $fail = "true" ]; then
 			retry=$((retry+1))
@@ -384,17 +388,23 @@ checkstatus () {
 				echo STREAM FAILED
 				killallreplace $jobchannel $jobportin $jobportout
 				#### Reconnect
-				echo "reconnecting to sopcast"
+				echo "Reconnecting to sopcast..."
 				sopconnect $jobchannel $jobportin $jobportout
-				echo "restarting vlc player"
+				echo "Restarting vlc player..."
 				sleep 3				
 				nohup cvlc "http://127.0.0.1:$jobportout/tv.asf" :demux=dump :demuxdump-file="$jobfile$newfile".asf &
+				echo "New file created $jobfile$newfile"
 				newfile=$((nefile+1))
 				filesize="0"
 			fi		
 		fi
+		
 		#####TIME TO WAIT BETWEEN CHECKS
-		sleep 30
+		for x in {30..1..3}
+		do
+			echo "Next check in $x"
+			sleep 3
+		done		
 	done
 }
 
@@ -700,8 +710,9 @@ softwarecheck () {
 	fi
 
 	echo "Checking for cvlc"
-	swcheck=$(cvlc --version)	
-	echo "Commandline VLC not installed correctly:"
+	swcheck=$(cvlc --version)
+	if [ -z "$swcheck" ]; then
+		echo "Commandline VLC not installed correctly:"
 		echo "cvlc command not found"
 		echo "Do you want to skip this check?"
 		echo "Choose no for an option to install software."
@@ -726,14 +737,14 @@ softwarecheck () {
 		echo "cvlc installed"
 	fi	
 }
+
 ###USER MENU####
 if [ -z "$1" ]; then
 
 	quit="no"
 	#softwarecheck
 	clear
-	while [ $quit != "yes" ]; do	
-		clear			
+	while [ $quit != "yes" ]; do		
 		echo "1 Job Creation"
 		echo "2 Instant Job"
 		echo "3 Just Record Now!"
@@ -758,4 +769,3 @@ else
 	## If arguments are sent with opening file load a job or kill a job. $2 will be the kill job flag and $1 is job name. 
 	recordnow $1 $2
 fi
-

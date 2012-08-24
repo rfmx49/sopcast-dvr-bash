@@ -89,7 +89,7 @@ cronstart () {
 		--max-value=60 \
 	)
 	if [ -z "$cronminute" ]; then echo "cronminute read failed"; return; fi
-	cron=$(zenity --entry --text="The following will be written to your crontab file.\nStart of recording schedual\nChanges can be made below"\
+	cron=$(zenity --entry --text="The following will be written to your crontab file.\nStart of recording schedual\nChanges can be made below\n\n$jobname will start recording the $crondate day of the $cronmonth month at $cronhour:$cronminute."\
 		--entry-text="$cronminute $cronhour $crondate $cronmonth $cronday cd $appfolder && $appfolder/sopdvr.sh $jobname start >> $jobname.log"\
 	)
 	if [ -z "$cron" ]; then 
@@ -150,7 +150,7 @@ cronend () {
 	)
 	
 	#Confirm cron file
-	cronendt=$(zenity --entry --text="The following will be written to your crontab file.\nEnd of recording schedual\nChanges can be made below"\
+	cronendt=$(zenity --entry --text="The following will be written to your crontab file.\nEnd of recording schedual\nChanges can be made below\n\n$jobname will stop recording the $crondateend day of the $cronmonthend month at $cronhourend:$cronminuteend" \
 		--entry-text="$cronminuteend $cronhourend $crondateend $cronmonthend $crondayend cd $appfolder && $appfolder/sopdvr.sh $jobname kill >> $jobname.log"\
 	)
 	if [ -z "$cronendt" ]; then
@@ -338,7 +338,11 @@ checkstatus () {
 			fi		
 		fi
 		#####TIME TO WAIT BETWEEN CHECKS
-		sleep 30
+		for x in {30..1..3}
+		do
+			echo "Next check in $x"
+			sleep 3
+		done
 	done
 }
 
