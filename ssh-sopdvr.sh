@@ -4,6 +4,8 @@
 appfolder=$(pwd)
 ###### USER EDITABLE FIELD ABOVE ######
 echo $appfolder
+cat $appfolder/sop.log >> $appfolder/fullsop.log
+rm $appfolder/sop.log
 
 sopchannel () {
 	###### USER EDITABLE FIELD BELOW ######
@@ -412,24 +414,58 @@ sopconnect () {
 	echo "Starting sop connect"
 	## no random ports
 	## nohup sp-sc $1 8901 8902 > "$appfolder/sop.log" &
-	nohup sp-sc $1 $2 $3 > "$appfolder/sop.log" &
+	nohup sp-sc $1 $2 $3 >> "$appfolder/sop.log" &
 	echo "Waiting for connection to $1"
+	echo "$appfolder/sop.log"
 	sleep 3
 	sopstarted="no"
 	timeout=1
+	sopconnectretymax="30"
+	currentrety="0"
 	while [ $sopstarted != "yes" ]; do
-		grep "I START " "$appfolder/sop.log"
+		tail -n 20 "$appfolder/sop.log" | grep "I START "
 		if [ $? == "1" ]; then
-			clear
-			echo "Sopcast not started ($timeout/30s timeout)"
-			sleep 1
-			timeout=$((timeout+1))
-			if [ "$timeout" == "32" ]; then
-				echo "Connection timed out 30s" &
+			tail -n 5 "$appfolder/sop.log" | grep "SO_QUIT"
+			if [ $? == "1" ]; then
+				clear
+				echo "Sopcast not started ($timeout/30s timeout)"
+				sleep 1
+				timeout=$((timeout+1))
+				if [ "$timeout" == "31" ]; then
+					echo "Connection timed out 30s" &
+					psid=$(ps ax | grep -v grep | grep "sp-sc.$1.$2.$3"| awk '{print$1}')
+					echo "Process ID of sp-sc job = $psid will be killed"
+					kill -9 $psid
+					cat $appfolder/sop.log >> $appfolder/fullsop.log
+					rm $appfolder/sop.log
+					currentrety=$((currentrety+1))
+					if [ "$currentrety" == "$sopconnectretymax" ]; then
+						currentrety="0"
+						sopfailed
+					fi
+					nohup sp-sc $1 $2 $3 >> "$appfolder/sop.log" &
+					timeout=1
+				fi
+			else
+				clear
+				echo "Sopcast channel not responding please wait" &
 				psid=$(ps ax | grep -v grep | grep "sp-sc.$1.$2.$3"| awk '{print$1}')
 				echo "Process ID of sp-sc job = $psid will be killed"
 				kill -9 $psid
-				nohup sp-sc $1 $2 $3 > "$appfolder/sop.log" &
+				sleep 3
+				cat $appfolder/sop.log >> $appfolder/fullsop.log
+				rm $appfolder/sop.log
+				if [ "$currentrety" == "$sopconnectretymax" ]; then
+					currentrety="0"
+					sopfailed
+				fi		
+				for i in {27..1}; do
+					echo "Sopcast channel not responding Reconnecting in ($i s)"
+					sleep 1
+					clear
+				done
+				nohup sp-sc $1 $2 $3 >> "$appfolder/sop.log" &
+				sleep 1
 				timeout=1
 			fi
 		else
@@ -438,6 +474,25 @@ sopconnect () {
 		fi
 	done
 	sleep 3
+}
+
+sopfailed () {
+	exit
+}
+
+showonly () {
+	randomport
+	jobportin=$ranport
+	randomport
+	jobportout=$ranport
+	sopchannel
+	if [ $? == 1 ]; then echo "sopchannel failed"; return; fi
+	echo $channelname
+	echo "Connecting to sopcast"
+	sopconnect $channelname $jobportin $jobportout
+	echo "Starting VLC"
+	vlc "http://127.0.0.1:$jobportout/tv.asf"
+	killallreplace $jobchannel $jobportin $jobportout #replace
 }
 
 recordonly () {
@@ -740,9 +795,9 @@ softwarecheck () {
 
 ###USER MENU####
 if [ -z "$1" ]; then
-
+	
 	quit="no"
-	#softwarecheck
+	softwarecheck
 	clear
 	while [ $quit != "yes" ]; do		
 		echo "1 Job Creation"
@@ -757,6 +812,7 @@ if [ -z "$1" ]; then
 			1) clear; creation ;;
 			2) clear; instantcreate ;;
 			3) clear; recordonly ;;
+			5) clear; showonly ;;
 			6) clear; stoprec ;;
 			7) clear; advancemenu ;;
 			8) clear; quit="yes" ;;
@@ -767,5 +823,6 @@ if [ -z "$1" ]; then
 
 else
 	## If arguments are sent with opening file load a job or kill a job. $2 will be the kill job flag and $1 is job name. 
+	autostart="true"	
 	recordnow $1 $2
 fi
