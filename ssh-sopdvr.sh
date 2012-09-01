@@ -20,6 +20,8 @@ sopchannel () {
 	echo "6. sop://broker.sopcast.com:3912/131822 Footy Goal2"
 	echo "7. sop://broker.sopcast.com:3912/132348 LiveSportszone [RO]"
 	echo "8. sop://221.12.89.140:3912/18669 Test Channel"
+	echo "9. sop://broker.sopcast.com:3912/134160 Spanish Canal HD"
+	echo "10. sop://broker.sopcast.com:3912/122909 Senta CA [EN]"
 	echo 
 	###### USER EDITABLE FIELDS ABOVE ######
 	read choice
@@ -32,6 +34,8 @@ sopchannel () {
 			6) channelname="sop://broker.sopcast.com:3912/131822" ;;
 			7) channelname="sop://broker.sopcast.com:3912/132348" ;;
 			8) channelname="sop://221.12.89.140:3912/18669" ;;
+			9) channelname="sop://broker.sopcast.com:3912/134160" ;;
+			10) channelname="sop://broker.sopcast.com:3912/122909" ;;
 			*) channelname=$choice ;;
 		esac
 	if [ -z "$channelname" ]; then echo "Value not set, so exiting"; return 1; fi

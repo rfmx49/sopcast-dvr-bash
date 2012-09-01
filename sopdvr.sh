@@ -19,6 +19,8 @@ sopchannel () {
 		"sop://broker.sopcast.com:3912/131822" "Footy Goal2" \
 		"sop://broker.sopcast.com:3912/132348" "LiveSportszone [RO]" \
 		"sop://221.12.89.140:3912/18669" "Test Channel" \
+		"sop://broker.sopcast.com:3912/111686" "Digisport2 [RO]" \
+		"sop://broker.sopcast.com:3912/122909" "Senta CA [EN]" \
 	)
 
 	###### USER EDITABLE FIELDS ABOVE ######
